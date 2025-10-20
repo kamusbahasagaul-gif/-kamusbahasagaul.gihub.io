@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAMUS BAHASA GAUL</title>
+    <!-- Memuat Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Memuat ikon Lucide React -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <!-- Menggunakan Font Inter -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7f9;
+        }
+        /* Custom gradient for professional feel */
+        .header-gradient {
+            background: linear-gradient(135deg, #000080 0%, #6A8DAD 100%);
+        }
+        /* Style untuk menempatkan Lucide icons */
+        .icon {
+            display: inline-block;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- Header Sticky (Dominan dan Profesional) -->
+    <header class="header-gradient text-white sticky top-0 z-50 shadow-xl p-4 md:p-6">
+        <div class="max-w-4xl mx-auto">
+            <!-- Judul Utama Kamus -->
+            <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight mb-1">KAMUS BAHASA GAUL</h1>
+
+            <!-- Subjudul dan Penulis -->
+            <p class="text-xl font-light opacity-80 mt-2">
+                Kamus Fotografi
+            </p>
+            <p class="text-sm italic opacity-70">
+                Penyusun: Efhi Fania Sihotang & Gemini AI
+            </p>
+
+            <!-- Kolom Pencarian -->
+            <div class="mt-4 relative">
+                <input type="text" id="searchInput" placeholder="Cari istilah, contoh: 'Gas', 'Sus', 'Bucin'..."
+                       class="w-full p-3 pl-10 rounded-xl text-gray-900 border-2 border-transparent focus:border-white focus:ring-0 transition-all duration-300 shadow-lg text-lg"
+                       oninput="handleSearch()">
+                <i data-lucide="search" class="icon absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-500"></i>
+
+                <!-- Dropdown Autocomplete -->
+                <ul id="autocompleteResults" class="absolute w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto hidden">
+                    <!-- Hasil Autocomplete akan dimuat di sini -->
+                </ul>
+            </div>
+        </div>
+    </header>
+
+    <!-- Konten Utama Kamus (Hasil Entri) -->
+    <main class="max-w-4xl mx-auto p-4 md:p-6">
+        <div id="dictionaryContent">
+            <!-- Entri Kamus akan dimuat di sini -->
+        </div>
+
+        <!-- Feedback Pencarian (Tidak Ditemukan) -->
+        <div id="noResultsMessage" class="hidden text-center p-8 mt-12 bg-white rounded-xl shadow-lg border border-gray-200">
+            <i data-lucide="Frown" class="icon h-12 w-12 text-gray-500 mx-auto mb-4"></i>
+            <h2 class="text-2xl font-semibold text-gray-700">Istilah Tidak Ditemukan</h2>
+            <p class="mt-2 text-gray-600">
+                Maaf, istilah yang Anda cari tidak ada dalam Kamus Bahasa Gaul.
+            </p>
+            <div id="googleSearchButtonContainer" class="mt-4">
+                <!-- Tombol Google Search akan dimuat di sini -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer Kamus -->
+    <footer class="text-center p-4 mt-8 text-gray-600 border-t border-gray-200">
+        <p class="text-sm">
+            <i data-lucide="book-open" class="icon h-4 w-4 mr-1"></i>
+            Digunakan untuk perkuliahan Leksikografi dan Penyusunan Kamus di USD
+        </p>
+        <p class="text-xs mt-2 opacity-60">Versi 1.0. Tanggal Pembaruan Data: 13/10/2025</p>
+        <p id="authStatus" class="text-xs mt-1 opacity-60"></p>
+    </footer>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Menonaktifkan log level untuk performa tinggi, tetapi biarkan untuk debugging
+        // setLogLevel('Debug');
+
+        // Global Variables provided by Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db, auth, userId = null;
+        let bookmarks = new Set();
+        let isAuthReady = false;
+
+        const DICTIONARY_DATA = [
+            { term: "Gua / Gue", definition: "Panggilan santai untuk menyebut diri sendiri, biasanya digunakan saat berbicara dengan orang yang seumuran.", example: "Gua pergi ke rumah Sinta kemarin.", date: "13/10/2025", synonyms: ["Saya", "Aku"] },
+            { term: "Lo", definition: "Panggilan santai untuk menyebut orang lain, biasanya digunakan saat berbicara dengan orang yang seumuran.", example: "Lo temenin gue ke mal, yuk.", date: "13/10/2025", synonyms: ["Kamu", "Anda"] },
+            { term: "Bestie", definition: "Panggilan akrab untuk teman dekat atau sahabat; terkadang digunakan secara sarkas.", example: "Sinta mah bestie gue, ke mana-mana juga bareng.", date: "13/10/2025", synonyms: ["Sahabat", "Teman Akrab"] },
+            { term: "Gas", definition: "Ajakan untuk pergi ke suatu tempat atau bentuk persetujuan terhadap suatu kegiatan.", example: "Gas pantai, yuk! / Gas!", date: "13/10/2025", synonyms: ["Yuk!", "Setuju", "Berangkat"] },
+            { term: "Nongki", definition: "Plesetan dari kata nongkrong, yaitu aktivitas mengobrol santai dengan teman di suatu tempat.", example: "Nongki ke kafe Seturan, yuk.", date: "13/10/2025", synonyms: ["Nongkrong", "Kumpul"] },
+            { term: "Skena", definition: "Istilah untuk menggambarkan gaya berpakaian vintage, selera musik indie, dan kebiasaan nongkrong di kafe bergaya klasik.", example: "Santi mah anak skena banget, nongkrong di kafe vintage mulu.", date: "13/10/2025", synonyms: ["Gaya Indie", "Subkultur"] },
+            { term: "BTW", definition: "Singkatan dari by the way (ngomong-ngomong); digunakan untuk menyisipkan informasi baru.", example: "BTW, Santi juara 1 kelas, loh.", date: "13/10/2025", synonyms: ["Ngomong-ngomong"] },
+            { term: "OTW", definition: "Singkatan dari on the way (sedang menuju); digunakan untuk memberi tahu bahwa seseorang sedang dalam perjalanan.", example: "Gue OTW ke kampus sekarang.", date: "13/10/2025", synonyms: ["Di Jalan", "Sedang Pergi"] },
+            { term: "LOL", definition: "Singkatan dari laughing out loud (tertawa keras); digunakan ketika sesuatu terasa sangat lucu.", example: "LOL, kocak banget!", date: "13/10/2025", synonyms: ["Ngakak", "Tertawa Terbahak-bahak"] },
+            { term: "CMIIW", definition: "Singkatan dari correct me if I’m wrong (benarkan saya jika salah); digunakan untuk memastikan kebenaran informasi.", example: "Setahu aku besok kita ke kampus lagi, tapi CMIIW ya.", date: "13/10/2025", synonyms: ["Koreksi", "Mohon Dikoreksi"] },
+            { term: "FYI", definition: "Singkatan dari for your information (sekadar informasi); digunakan untuk memberikan informasi tambahan.", example: "FYI aja nih, katanya Santi nyewa helikopter di Swiss.", date: "13/10/2025", synonyms: ["Sebagai Informasi"] },
+            { term: "IMO", definition: "Singkatan dari in my opinion (menurutku); digunakan untuk menyampaikan opini pribadi.", example: "IMO, filmnya garing banget.", date: "13/10/2025", synonyms: ["Menurut Saya", "Pendapat Pribadi"] },
+            { term: "TMI", definition: "Singkatan dari too much information (terlalu banyak informasi); digunakan saat seseorang terlalu detail bercerita hingga membuat orang lain tidak nyaman.", example: "Dia ceritanya kepanjangan, TMI banget sumpah.", date: "13/10/2025", synonyms: ["Terlalu Detail"] },
+            { term: "Nolep", definition: "Singkatan dari no life; sebutan untuk orang yang jarang bersosialisasi atau terlalu menyendiri.", example: "Dia mah nolep, gak punya teman.", date: "13/10/2025", synonyms: ["Introvert", "Penyendiri"] },
+            { term: "Baper", definition: "Singkatan dari bawa perasaan; digunakan untuk seseorang yang terlalu perasa terhadap candaan atau hal romantis.", example: "Santi orangnya baperan, gak bisa diajak bercanda.", date: "13/10/2025", synonyms: ["Sensitif", "Terlalu Perasa"] },
+            { term: "Mager", definition: "Singkatan dari malas gerak; digunakan saat seseorang enggan melakukan sesuatu.", example: "Nanti deh ngerjain tugasnya, lagi mager.", date: "13/10/2025", synonyms: ["Malas", "Enggan"] },
+            { term: "Gabut", definition: "Ungkapan untuk menggambarkan keadaan saat seseorang tidak tahu harus melakukan apa.", example: "Libur ngapain ya, gabut banget di rumah.", date: "13/10/2025", synonyms: ["Bosan", "Menganggur"] },
+            { term: "Bucin", definition: "Singkatan dari budak cinta; sebutan untuk seseorang yang terlalu terobsesi dengan pasangannya.", example: "Santi bucin banget, sampai gak tidur demi nemenin pacarnya.", date: "13/10/2025", synonyms: ["Terobsesi Cinta", "Vergila"] },
+            { term: "CLBK", definition: "Singkatan dari cinta lama bersemi kembali; menggambarkan hubungan lama yang kembali terjalin.", example: "Santi CLBK sama mantannya.", date: "13/10/2025", synonyms: ["Balikan", "Reuni Cinta"] },
+            { term: "PHP", definition: "Singkatan dari pemberi harapan palsu; menggambarkan seseorang yang memberi harapan tanpa niat serius.", example: "Santi di-PHP-in sama cowok, eh cowoknya malah jadian sama cewek lain.", date: "13/10/2025", synonyms: ["Ghosting", "Tidak Serius"] },
+            { term: "HTS", definition: "Singkatan dari hubungan tanpa status; menggambarkan hubungan dekat tanpa komitmen resmi.", example: "Gue di-HTS-in sama gebetan gue.", date: "13/10/2025", synonyms: ["Hubungan Abu-abu"] },
+            { term: "AFK", definition: "Singkatan dari away from keyboard; digunakan dalam konteks game untuk menunjukkan seseorang sedang tidak aktif.", example: "Gue AFK dulu, mau beli barang.", date: "13/10/2025", synonyms: ["Jeda", "Tidak Aktif"] },
+            { term: "FOMO", definition: "Singkatan dari fear of missing out; menggambarkan seseorang yang takut ketinggalan tren atau berita.", example: "Bikin tren TikTok velocity yuk, FOMO nih.", date: "13/10/2025", synonyms: ["Takut Ketinggalan"] },
+            { term: "KEPO", definition: "Berasal dari bahasa Hokkien kaypoh (ingin tahu); berarti terlalu penasaran terhadap sesuatu.", example: "Kamu tahu berita soal Santi gak? Ceritain dong, kepo banget!", date: "13/10/2025", synonyms: ["Penasaran", "Ingin Tahu Berlebihan"] },
+            { term: "Lurking", definition: "Aktivitas memantau media sosial seseorang tanpa meninggalkan jejak (like atau komentar).", example: "Ketahuan kamu lurking IG mantan!", date: "13/10/2025", synonyms: ["Mengintai", "Mengamati Diam-diam"] },
+            { term: "Ghosting", definition: "Istilah untuk hubungan di mana salah satu pihak tiba-tiba menghilang tanpa kabar.", example: "Dia ghosting aku setelah deket 3 bulan.", date: "13/10/2025", synonyms: ["Menghilang Tanpa Kabar"] },
+            { term: "Noob", definition: "Berasal dari kata newbie (pemula); digunakan untuk menyebut orang yang belum berpengalaman.", example: "Bantuin aku dong, masih noob nih.", date: "13/10/2025", synonyms: ["Newbie", "Amatir"] },
+            { term: "Flexing", definition: "Aktivitas memamerkan barang, gaya hidup, atau prestasi di media sosial.", example: "Santi suka flexing sepatu branded di TikTok.", date: "13/10/2025", synonyms: ["Pamer", "Show Off"] },
+            { term: "Receh", definition: "Lawakan atau candaan yang garing tapi tetap lucu.", example: "Humor gue receh banget, kocak!", date: "13/10/2025", synonyms: ["Humor Murahan"] },
+            { term: "Salfok", definition: "Singkatan dari salah fokus; digunakan saat perhatian seseorang teralihkan dari hal utama.", example: "Gue salfok sama bajunya, bukan sama materinya.", date: "13/10/2025", synonyms: ["Gagal Fokus"] },
+            { term: "Rizz", definition: "Singkatan dari charisma; digunakan untuk menggambarkan seseorang yang pandai menggoda lawan jenis.", example: "Anak itu rizz-nya parah banget, baru ngobrol bentar udah bikin cewek-cewek senyum.", date: "13/10/2025", synonyms: ["Daya Tarik", "Kharisma"] },
+            { term: "Gyat", definition: "Ekspresi kagum (biasanya laki-laki kepada perempuan dengan fisik menarik); memiliki konotasi negatif.", example: "Gyat, cantik banget dia!", date: "13/10/2025", synonyms: ["Wow", "Kagum"] },
+            { term: "Mewing", definition: "Tindakan meletakkan lidah di langit-langit mulut untuk membentuk garis rahang lebih tajam.", example: "Katanya kalau rajin mewing bisa bikin rahang makin tegas.", date: "13/10/2025", synonyms: ["Teknik Rahang"] },
+            { term: "Fanum Tax", definition: "Situasi ketika makanan atau barang seseorang diambil orang lain secara bercanda.", example: "Tadi ayam gue lima potong, kok hilang? Jangan-jangan fanum tax?", date: "13/10/2025", synonyms: ["Pajak Teman"] },
+            { term: "Skibidi", definition: "Tidak memiliki arti khusus; digunakan untuk menggambarkan sesuatu yang lucu, viral, atau absurd.", example: "Eh, kamu lihat video dance skibidi itu? Gila, gokil banget!", date: "13/10/2025", synonyms: ["Absurd", "Viral"] },
+            { term: "Ohio", definition: "Istilah untuk menggambarkan sesuatu yang aneh atau tidak biasa.", example: "Hati-hati ke mal itu, katanya suasananya Ohio banget.", date: "13/10/2025", synonyms: ["Aneh", "Tidak Biasa"] },
+            { term: "Sigma", definition: "Menggambarkan seseorang yang independen, dominan, dan percaya diri.", example: "Kalau mau jadi sigma, harus mandiri dan yakin sama diri sendiri.", date: "13/10/2025", synonyms: ["Independen", "Dominan"] },
+            { term: "Looksmaxxing", definition: "Upaya seseorang untuk memaksimalkan penampilan agar terlihat lebih menarik.", example: "Kalau pengen tampil lebih baik, coba fokus ke looksmaxxing yang sehat.", date: "13/10/2025", synonyms: ["Perbaikan Penampilan"] },
+            { term: "Bet", definition: "Ungkapan kesepakatan atau kesiapan melakukan sesuatu.", example: "Besok nongkrong di mal? Bet!", date: "13/10/2025", synonyms: ["Setuju", "Siap"] },
+            { term: "GOAT", definition: "Singkatan dari greatest of all time; digunakan untuk menggambarkan seseorang atau hal yang terbaik sepanjang masa.", example: "Michael Jordan itu GOAT-nya bola basket dunia.", date: "13/10/2025", synonyms: ["Terbaik Sepanjang Masa"] },
+            { term: "Sus", definition: "Singkatan dari suspicious (mencurigakan).", example: "Kenapa dia tiba-tiba diem? Kayaknya sus deh.", date: "13/10/2025", synonyms: ["Mencurigakan"] },
+            { term: "Bussin", definition: "Digunakan untuk menggambarkan sesuatu yang keren, memuaskan, atau sangat enak.", example: "Outfit kamu hari ini bussin banget.", date: "13/10/2025", synonyms: ["Keren", "Hebat", "Enak"] },
+            { term: "Cap", definition: "Menunjukkan seseorang yang berbohong atau membual.", example: "Dia bilang bisa lari 100 meter di bawah 10 detik, itu cap banget sih.", date: "13/10/2025", synonyms: ["Bohong", "Omong Kosong"] },
+            { term: "No cap", definition: "Kebalikan dari cap; berarti jujur atau sungguh-sungguh.", example: "No cap, aku gak bohong, dia jago banget main game.", date: "13/10/2025", synonyms: ["Jujur", "Sungguh-sungguh"] },
+            { term: "Lore", definition: "Cerita latar belakang atau mitologi di balik suatu karakter, tempat, atau peristiwa.", example: "Kalau mau ngerti karakter ini, baca dulu lore-nya.", date: "13/10/2025", synonyms: ["Latar Belakang", "Mitologi"] },
+            { term: "Ratio’d", definition: "Kondisi ketika komentar seseorang mendapat lebih banyak like daripada postingan aslinya.", example: "Dia kena ratio parah, komentarnya lebih banyak dari like.", date: "13/10/2025", synonyms: ["Kalah Populer"] },
+            { term: "Mad Lit", definition: "Ekspresi untuk sesuatu yang sangat keren atau menarik, biasanya terkait musik atau gaya hidup.", example: "Konser semalam mad lit banget, gak mau pulang rasanya.", date: "13/10/2025", synonyms: ["Sangat Keren", "Hebat"] },
+            { term: "Gucci", definition: "Slang untuk menggambarkan sesuatu yang baik, hebat, keren, atau santai.", example: "Santai aja, semuanya gucci kok!", date: "13/10/2025", synonyms: ["Baik", "Keren", "Santai"] },
+            { term: "ICK", definition: "Istilah untuk menggambarkan rasa jijik atau hilang ketertarikan dalam hubungan romantis.", example: "Pas dia ngomong gitu, aku langsung ick dan pengen pergi.", date: "13/10/2025", synonyms: ["Jijik", "Ilfeel"] },
+            { term: "BOP", definition: "Istilah untuk lagu yang sangat bagus dan enak didengar.", example: "Lagu barunya bop banget, aku suka banget!", date: "13/10/2025", synonyms: ["Lagu Hits", "Lagu Keren"] }
+        ];
+
+        // --- Inisialisasi Firebase ---
+        if (firebaseConfig) {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('authStatus').textContent = `Status: Terhubung (ID: ${userId})`;
+                        await setupBookmarksListener();
+                    } else if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    isAuthReady = true;
+                    // Tampilkan semua data setelah otentikasi siap
+                    renderDictionary(DICTIONARY_DATA);
+                });
+            } catch (e) {
+                console.error("Gagal menginisialisasi Firebase:", e);
+                // Jika Firebase gagal, tetap tampilkan data kamus
+                renderDictionary(DICTIONARY_DATA);
+                document.getElementById('authStatus').textContent = 'Status: Gagal terhubung ke penyimpanan (Firestore).';
+                isAuthReady = true;
+            }
+        } else {
+            console.error("Konfigurasi Firebase tidak ditemukan.");
+            // Jika Firebase tidak ada, tetap tampilkan data kamus
+            renderDictionary(DICTIONARY_DATA);
+            isAuthReady = true;
+        }
+
+        /**
+         * Mengatur listener real-time untuk bookmark pengguna.
+         */
+        function setupBookmarksListener() {
+            if (!db || !userId) return;
+
+            const bookmarkDocRef = doc(db, `artifacts/${appId}/users/${userId}/bookmarks`, 'slang_bookmarks');
+
+            onSnapshot(bookmarkDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    // Data bookmark disimpan sebagai array string, di-setDoc sebagai map { term: true }
+                    bookmarks = new Set(Object.keys(data));
+                } else {
+                    bookmarks = new Set();
+                }
+                // Render ulang konten kamus untuk memperbarui status bookmark
+                handleSearch();
+            }, (error) => {
+                console.error("Error listening to bookmarks:", error);
+            });
+        }
+
+        /**
+         * Menangani fungsi Bookmark (Simpan Istilah).
+         * @param {string} term - Istilah yang akan di-bookmark.
+         */
+        window.toggleBookmark = async function(term) {
+            if (!isAuthReady || !db || !userId) {
+                alert("Harap tunggu otentikasi selesai sebelum menyimpan.");
+                return;
+            }
+
+            const bookmarkDocRef = doc(db, `artifacts/${appId}/users/${userId}/bookmarks`, 'slang_bookmarks');
+            const termKey = term.replace(/[./#$\[\]]/g, '_'); // Firestore tidak mengizinkan karakter tertentu
+
+            let newBookmarks = {};
+            // Mengambil status bookmark saat ini
+            const docSnap = await getDoc(bookmarkDocRef);
+            if (docSnap.exists()) {
+                newBookmarks = docSnap.data();
+            }
+
+            if (bookmarks.has(term)) {
+                // Hapus bookmark
+                delete newBookmarks[termKey];
+                bookmarks.delete(term);
+            } else {
+                // Tambah bookmark
+                newBookmarks[termKey] = true;
+                bookmarks.add(term);
+            }
+
+            try {
+                // Gunakan setDoc untuk menimpa seluruh field bookmark
+                await setDoc(bookmarkDocRef, newBookmarks);
+                console.log(`Bookmark untuk "${term}" berhasil diubah.`);
+            } catch (error) {
+                console.error("Gagal memperbarui bookmark:", error);
+            }
+        }
+
+        /**
+         * Render kamus berdasarkan array data yang difilter.
+         * @param {Array<Object>} data - Array objek istilah kamus.
+         */
+        function renderDictionary(data) {
+            const container = document.getElementById('dictionaryContent');
+            const noResults = document.getElementById('noResultsMessage');
+            const searchInput = document.getElementById('searchInput');
+            const searchTerm = searchInput.value.trim();
+
+            container.innerHTML = '';
+            noResults.classList.add('hidden');
+
+            if (data.length === 0) {
+                noResults.classList.remove('hidden');
+                const buttonContainer = document.getElementById('googleSearchButtonContainer');
+                
+                let googleSearchHTML = '';
+                if (searchTerm.length > 0) {
+                    const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(searchTerm + ' arti bahasa gaul')}`;
+                    googleSearchHTML = `
+                        <a href="${googleUrl}" target="_blank" rel="noopener noreferrer"
+                           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-full shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150">
+                            <i data-lucide="external-link" class="icon h-4 w-4 mr-2"></i>
+                            Cari Istilah "${searchTerm}" di Google
+                        </a>
+                    `;
+                } else {
+                     googleSearchHTML = `<p class="text-gray-500">Ketikkan istilah untuk melihat opsi pencarian Google.</p>`;
+                }
+                buttonContainer.innerHTML = googleSearchHTML;
+                lucide.createIcons(); // Re-render Lucide icons
+                return;
+            }
+
+            // Tampilkan entri yang ditemukan
+            data.forEach(entry => {
+                const isBookmarked = bookmarks.has(entry.term);
+                const bookmarkIcon = isBookmarked ? 'bookmark' : 'bookmark-plus';
+                const bookmarkColor = isBookmarked ? 'text-yellow-500 hover:text-yellow-600' : 'text-gray-400 hover:text-blue-500';
+
+                const thesaurusHTML = entry.synonyms && entry.synonyms.length > 0 ?
+                    `<div class="mt-2 text-sm text-gray-500 border-t border-dashed pt-2">
+                        <i data-lucide="book-open-text" class="icon h-4 w-4 mr-1"></i>
+                        <strong>Sinonim (Tesaurus):</strong> ${entry.synonyms.join(', ')}
+                    </div>` : '';
+                
+                const entryElement = `
+                    <div class="bg-white p-6 md:p-8 rounded-xl shadow-lg mb-6 hover:shadow-xl transition duration-300 border-l-4 border-gray-500">
+                        <!-- Istilah Utama -->
+                        <div class="flex justify-between items-start">
+                            <h2 class="text-3xl font-bold text-[#000080] mb-2">${entry.term}</h2>
+                            <!-- Tombol Bookmark -->
+                            <button onclick="toggleBookmark('${entry.term.replace(/'/g, "\\'")}')" class="p-2 rounded-full transition duration-200" title="${isBookmarked ? 'Hapus dari Bookmark' : 'Simpan Istilah'}">
+                                <i data-lucide="${bookmarkIcon}" class="icon h-6 w-6 ${bookmarkColor} fill-current"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Definisi Jelas -->
+                        <p class="text-gray-700 text-lg leading-relaxed mt-2">${entry.definition}</p>
+
+                        <!-- Contoh Penggunaan (Teknis) -->
+                        <div class="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                            <p class="text-sm font-semibold text-gray-600">Contoh Penggunaan:</p>
+                            <p class="italic text-gray-800 text-base">“${entry.example}”</p>
+                        </div>
+                        
+                        <!-- Thesaurus -->
+                        ${thesaurusHTML}
+
+                        <!-- Tanggal Pembaruan & Google Link -->
+                        <div class="mt-4 flex justify-between items-center border-t pt-3">
+                            <p class="text-xs text-gray-400">Diperbarui: ${entry.date}</p>
+                            <!-- Tautan Pencarian Google -->
+                            <a href="https://www.google.com/search?q=${encodeURIComponent(entry.term + ' arti')}" target="_blank" rel="noopener noreferrer"
+                               class="text-blue-500 hover:text-blue-700 text-sm font-medium transition duration-150 flex items-center">
+                                Cari di Google
+                                <i data-lucide="arrow-right" class="icon h-4 w-4 ml-1"></i>
+                            </a>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', entryElement);
+            });
+            lucide.createIcons(); // Re-render Lucide icons
+        }
+
+        /**
+         * Implementasi dasar Fuzzy Search (pencarian mirip) yang cepat.
+         * Menggunakan filtering substring dan pengecekan kata/frasa.
+         * @param {string} query - Kata kunci pencarian.
+         * @returns {Array<Object>} - Hasil yang difilter.
+         */
+        function performFuzzySearch(query) {
+            const lowerQuery = query.toLowerCase();
+            if (!lowerQuery) return DICTIONARY_DATA;
+
+            // 1. Pencarian Tepat (Term atau Definisi mengandung Query)
+            let results = DICTIONARY_DATA.filter(entry =>
+                entry.term.toLowerCase().includes(lowerQuery) ||
+                entry.definition.toLowerCase().includes(lowerQuery) ||
+                (entry.synonyms && entry.synonyms.some(syn => syn.toLowerCase().includes(lowerQuery)))
+            );
+
+            return results;
+        }
+
+        /**
+         * Menangani input pencarian (termasuk Autocomplete dan Fuzzy Search).
+         */
+        window.handleSearch = function() {
+            const searchInput = document.getElementById('searchInput');
+            const autocompleteContainer = document.getElementById('autocompleteResults');
+            const query = searchInput.value.trim();
+
+            if (query.length === 0) {
+                autocompleteContainer.classList.add('hidden');
+                renderDictionary(DICTIONARY_DATA); // Tampilkan semua jika kosong
+                return;
+            }
+
+            // --- 1. Fuzzy Search ---
+            const filteredData = performFuzzySearch(query);
+
+            // --- 2. Autocomplete (Ambil 5 hasil pertama) ---
+            const autocompleteResults = filteredData.slice(0, 5);
+
+            if (autocompleteResults.length > 0) {
+                autocompleteContainer.innerHTML = autocompleteResults.map(entry => `
+                    <li class="p-3 hover:bg-gray-100 cursor-pointer text-gray-800 transition duration-150"
+                        onclick="selectAutocomplete('${entry.term.replace(/'/g, "\\'")}');">
+                        <strong>${entry.term}</strong> - <span class="text-sm text-gray-500">${entry.definition.substring(0, 50)}...</span>
+                    </li>
+                `).join('');
+                autocompleteContainer.classList.remove('hidden');
+            } else {
+                autocompleteContainer.classList.add('hidden');
+            }
+
+            // --- 3. Render Hasil Pencarian Utama ---
+            renderDictionary(filteredData);
+        }
+
+        /**
+         * Mengisi input pencarian dengan istilah yang dipilih dari Autocomplete dan memicu pencarian.
+         * @param {string} term - Istilah kamus yang dipilih.
+         */
+        window.selectAutocomplete = function(term) {
+            document.getElementById('searchInput').value = term;
+            document.getElementById('autocompleteResults').classList.add('hidden');
+            // Hanya tampilkan entri yang persis cocok
+            const exactMatch = DICTIONARY_DATA.filter(entry => entry.term.toLowerCase() === term.toLowerCase());
+            renderDictionary(exactMatch.length > 0 ? exactMatch : performFuzzySearch(term));
+        }
+
+        // Inisialisasi ikon Lucide saat DOM dimuat
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            // Panggil handleSearch untuk menampilkan semua data awal jika autentikasi sudah siap
+            if (isAuthReady) {
+                 renderDictionary(DICTIONARY_DATA);
+            }
+        });
+
+    </script>
+</body>
+</html>
